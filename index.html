@@ -12,7 +12,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #f9fafb;
             color: #111827;
             line-height: 1.6;
@@ -445,6 +445,68 @@
             justify-content: center;
         }
 
+        /* Timetable */
+        .timetable-container {
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+
+        .timetable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 14px;
+            min-width: 600px; /* Ensures table doesn't get too small on mobile */
+        }
+
+        .timetable th, .timetable td {
+            border: 1px solid #e5e7eb;
+            padding: 10px 8px;
+            text-align: center;
+            vertical-align: top;
+        }
+
+        .timetable th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .timetable td {
+            background-color: #ffffff;
+            min-height: 60px; /* Adjust as needed */
+        }
+
+        .timetable .course-entry {
+            background-color: #dbeafe; /* Light blue for registered courses */
+            color: #1e40af; /* Darker blue text */
+            border-radius: 4px;
+            padding: 5px;
+            margin: 2px 0;
+            font-size: 12px;
+            line-height: 1.3;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .timetable .course-entry:hover {
+            background-color: #bfdbfe;
+        }
+
+        .timetable .course-entry strong {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        /* Specific colors for different departments in timetable */
+        .timetable .course-entry.comp-sci { background-color: #dbeafe; color: #1e40af; } /* Blue */
+        .timetable .course-entry.math { background-color: #dcfce7; color: #15803d; }     /* Green */
+        .timetable .course-entry.english { background-color: #f3e8ff; color: #7c3aed; }  /* Purple */
+        .timetable .course-entry.physics { background-color: #fee2e2; color: #b91c1c; } /* Red */
+
+
         /* Responsive */
         @media (max-width: 768px) {
             .main-content {
@@ -462,6 +524,10 @@
             
             .modal-info {
                 grid-template-columns: 1fr;
+            }
+
+            .timetable-container {
+                overflow-x: scroll; /* Allows horizontal scrolling for small screens */
             }
         }
     </style>
@@ -481,7 +547,6 @@
     </header>
 
     <div class="container">
-        <!-- Status Section -->
         <div class="status-section">
             <h2>
                 <svg class="icon" viewBox="0 0 24 24">
@@ -508,9 +573,7 @@
             </div>
         </div>
 
-        <!-- Main Content -->
         <div class="main-content">
-            <!-- Course Search and List -->
             <div class="course-section">
                 <h2 class="section-title">
                     <svg class="icon" viewBox="0 0 24 24">
@@ -543,11 +606,9 @@
                 </div>
 
                 <div class="course-list" id="courseList">
-                    <!-- Courses will be populated here -->
-                </div>
+                    </div>
             </div>
 
-            <!-- Registered Courses -->
             <div class="registered-courses">
                 <h2 class="section-title">신청한 강의</h2>
                 <div class="registered-list" id="registeredList">
@@ -555,11 +616,33 @@
                         신청한 강의가 없습니다.
                     </div>
                 </div>
+
+                <div class="timetable-section" style="margin-top: 30px;">
+                    <h2 class="section-title">내 시간표</h2>
+                    <div class="timetable-container">
+                        <table class="timetable">
+                            <thead>
+                                <tr>
+                                    <th>시간</th>
+                                    <th>월</th>
+                                    <th>화</th>
+                                    <th>수</th>
+                                    <th>목</th>
+                                    <th>금</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timetableBody">
+                                </tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state" id="timetableEmptyState" style="display: none;">
+                        시간표에 추가된 강의가 없습니다.
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal -->
     <div class="modal" id="courseModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -684,10 +767,15 @@
         let registeredCourses = [];
         let selectedCourse = null;
 
+        // Get timetable specific elements
+        const timetableBody = document.getElementById('timetableBody');
+        const timetableEmptyState = document.getElementById('timetableEmptyState');
+
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             renderCourses();
             updateStatus();
+            renderTimetable(); // Added to render timetable on load
             
             // Event listeners
             document.getElementById('searchInput').addEventListener('input', filterCourses);
@@ -739,8 +827,8 @@
             
             return courses.filter(course => {
                 const matchesSearch = course.name.toLowerCase().includes(searchTerm) ||
-                                    course.code.toLowerCase().includes(searchTerm) ||
-                                    course.professor.toLowerCase().includes(searchTerm);
+                                        course.code.toLowerCase().includes(searchTerm) ||
+                                        course.professor.toLowerCase().includes(searchTerm);
                 const matchesDepartment = selectedDepartment === '전체' || course.department === selectedDepartment;
                 return matchesSearch && matchesDepartment;
             });
@@ -773,7 +861,25 @@
                 return;
             }
 
-            const timeConflict = registeredCourses.some(registered => registered.time === course.time);
+            const timeConflict = registeredCourses.some(registered => {
+                const registeredTime = parseCourseTime(registered.time);
+                const newCourseTime = parseCourseTime(course.time);
+
+                // Check for overlapping days
+                const overlappingDays = registeredTime.days.some(day => newCourseTime.days.includes(day));
+
+                if (!overlappingDays) return false; // No overlap if days are different
+
+                // Check for overlapping times on common days
+                const start1 = registeredTime.startMinute;
+                const end1 = registeredTime.endMinute;
+                const start2 = newCourseTime.startMinute;
+                const end2 = newCourseTime.endMinute;
+
+                // Condition for overlap: (start1 < end2 && end1 > start2)
+                return (start1 < end2 && end1 > start2);
+            });
+            
             if (timeConflict) {
                 alert('시간이 겹치는 강의가 있습니다.');
                 return;
@@ -785,6 +891,7 @@
             renderCourses();
             renderRegisteredCourses();
             updateStatus();
+            renderTimetable(); // Call renderTimetable after registration
             closeModal();
             alert('수강신청이 완료되었습니다!');
         }
@@ -797,6 +904,7 @@
             renderCourses();
             renderRegisteredCourses();
             updateStatus();
+            renderTimetable(); // Call renderTimetable after cancellation
             alert('수강신청이 취소되었습니다.');
         }
 
@@ -884,6 +992,130 @@
                 closeModal();
             }
         });
+
+        // --- Timetable specific functions ---
+
+        // Helper function to parse time and days
+        function parseCourseTime(timeString) {
+            const parts = timeString.split(' ');
+            const days = parts[0].split('/');
+            const timeRange = parts[1];
+            const [startTime, endTime] = timeRange.split('-');
+
+            // Convert time to a comparable format (e.g., minutes from midnight)
+            const timeToMinutes = (time) => {
+                const [hours, minutes] = time.split(':').map(Number);
+                return hours * 60 + minutes;
+            };
+
+            return {
+                days: days,
+                startMinute: timeToMinutes(startTime),
+                endMinute: timeToMinutes(endTime)
+            };
+        }
+
+        // Function to generate time slots
+        function generateTimeSlots() {
+            const slots = [];
+            for (let hour = 9; hour <= 18; hour++) { // From 9 AM to 6 PM
+                slots.push(`${String(hour).padStart(2, '0')}:00`);
+                if (hour < 18) { // Add :30 for all but the last hour
+                     slots.push(`${String(hour).padStart(2, '0')}:30`);
+                }
+            }
+            return slots;
+        }
+
+        // Function to render the timetable
+        function renderTimetable() {
+            const timeSlots = generateTimeSlots();
+            timetableBody.innerHTML = ''; // Clear existing timetable
+
+            if (registeredCourses.length === 0) {
+                timetableEmptyState.style.display = 'block';
+                return;
+            } else {
+                timetableEmptyState.style.display = 'none';
+            }
+
+            const daysOfWeek = ['월', '화', '수', '목', '금'];
+            const timetableData = {}; // Stores courses for each time slot and day
+
+            // Initialize timetableData
+            timeSlots.forEach(slot => {
+                timetableData[slot] = {};
+                daysOfWeek.forEach(day => {
+                    timetableData[slot][day] = [];
+                });
+            });
+
+            // Populate timetableData with registered courses
+            registeredCourses.forEach(course => {
+                const { days, startMinute, endMinute } = parseCourseTime(course.time);
+                
+                timeSlots.forEach(slot => {
+                    const [slotHour, slotMinute] = slot.split(':').map(Number);
+                    const slotStartMinute = slotHour * 60 + slotMinute;
+                    const slotEndMinute = slotStartMinute + 30; // Assuming 30-minute intervals
+
+                    // Check if course time overlaps with the current slot
+                    if (
+                        (startMinute < slotEndMinute && endMinute > slotStartMinute)
+                    ) {
+                        days.forEach(day => {
+                            if (timetableData[slot] && timetableData[slot][day]) {
+                                timetableData[slot][day].push(course);
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Render table rows
+            timeSlots.forEach(slot => {
+                const row = document.createElement('tr');
+                const timeCell = document.createElement('td');
+                timeCell.textContent = slot;
+                row.appendChild(timeCell);
+
+                daysOfWeek.forEach(day => {
+                    const cell = document.createElement('td');
+                    const coursesInSlot = timetableData[slot][day];
+                    
+                    if (coursesInSlot && coursesInSlot.length > 0) {
+                        // Filter out duplicate entries if a course spans multiple slots within a 30-min block
+                        const uniqueCourses = [];
+                        const courseIds = new Set();
+                        coursesInSlot.forEach(course => {
+                            if (!courseIds.has(course.id)) {
+                                uniqueCourses.push(course);
+                                courseIds.add(course.id);
+                            }
+                        });
+
+                        uniqueCourses.forEach(course => {
+                            const courseEntry = document.createElement('div');
+                            // Add a class based on department for different colors
+                            let departmentClass = '';
+                            switch(course.department) {
+                                case '컴퓨터공학과': departmentClass = 'comp-sci'; break;
+                                case '수학과': departmentClass = 'math'; break;
+                                case '영어영문학과': departmentClass = 'english'; break;
+                                case '물리학과': departmentClass = 'physics'; break;
+                                default: departmentClass = '';
+                            }
+                            courseEntry.className = `course-entry ${departmentClass}`;
+                            courseEntry.innerHTML = `<strong>${course.name}</strong>${course.professor}<br>(${course.credits}학점)`;
+                            courseEntry.onclick = () => openModal(course.id); // Make timetable entries clickable
+                            cell.appendChild(courseEntry);
+                        });
+                    }
+                    row.appendChild(cell);
+                });
+                timetableBody.appendChild(row);
+            });
+        }
     </script>
 </body>
 </html>
